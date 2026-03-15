@@ -1,5 +1,5 @@
-__authors__ = '1747579'
-__group__ = '14 potser?'
+__authors__ = ['1747579', '1744604', '1744896']
+__group__ = '14'
 
 import numpy as np
 import math
@@ -24,22 +24,11 @@ class KNN:
         #######################################################
         ##  YOU MUST REMOVE THE REST OF THE CODE OF THIS FUNCTION
         ##  AND CHANGE FOR YOUR OWN CODE
-        #######################################################
-        
-        """
-        EXPLICACIO:
-            Teoria: eliminar color i agafar pixels de la img. com a caracteristiques.
-            vector de 80x60 pixels - dimensio = 4800
-            Per tant, cada imatge 80x60x3 (files,col,canals RGB)
-            - Eliminar color: es fer la mitjana de canals
-            - Convetim la img. en vector: hem de passar de 80x60 a 4800; P=#n imatges
-            * Dividim entre 255 pq en RGB els pixels d'una imatge van de 0->negre, 255->blanc
-        """
+        #######################################################        
+        train_data = train_data.astype(float)
         
         P = train_data.shape[0]
-        # convertim RGB -> escala de grisos
-        gray = np.mean(train_data, axis = 3)
-        self.train_data = gray.reshape(P, -1) / 255.0
+        self.train_data = train_data.reshape(P, -1)
 
     def get_k_neighbours(self, test_data, k):
         """
@@ -54,14 +43,15 @@ class KNN:
         ##  AND CHANGE FOR YOUR OWN CODE
         #######################################################
         # obtenim el nombre d'imatges de test
+        test_data = test_data.astype(float)
         n_tests = test_data.shape[0]
-        # passem a grisos (mitjana del canal RGB)
-        gray = np.mean(test_data, axis = 3)
-        test_vectors = gray.reshape(n_tests, -1) / 255.0
+        test_data = test_data.reshape(n_tests, -1)
+
         # calculem la distancia entre cad test i cada train
-        distances = cdist(test_vectors, self.train_data)
+        distances = cdist(test_data, self.train_data, 'euclidean')
         # ordenem per distancia
-        self.neighbors = np.argsort(distances, axis=1)[:, :k] # retorna el indexs
+        closest_index = np.argsort(distances, axis=1)[:, :k]
+        self.neighbors = self.labels[closest_index]         
         
         
     def get_class(self):
@@ -78,11 +68,18 @@ class KNN:
          
         for i in range(self.neighbors.shape[0]):
             # obtenim les etiquetes dels k veins d'aquesta imatge
-            neighbors_labels = self.labels[self.neighbors[i]]
+            neighbors_labels = self.neighbors[i]
             
             # busquem l'etiqueta que me es repeteix
-            unique, counts = np.unique(neighbors_labels, ret = True)
-            predictions.append(unique[np.argmx(counts)])
+            values, counts = np.unique(neighbors_labels, return_counts = True)
+            
+            candidates = values[counts == np.max(counts)]
+
+            # escollim la que apareix primer als veins
+            for label in neighbors_labels:
+                if label in candidates:
+                    predictions.append(label)
+                    break
         return np.array(predictions)
         
         
