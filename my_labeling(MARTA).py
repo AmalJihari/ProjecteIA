@@ -37,6 +37,97 @@ def retrieval_combined(images, color_labels, shape_labels, query_colors, query_s
             res.append(img)
     return res
 
+# Analisis quantitatiu
+def get_shape_accuracy(predicted_shapes, gt_shapes):
+    predicted_shapes = np.array(predicted_shapes)
+    gt_shapes = np.array(gt_shapes)
+
+    correct = np.sum(predicted_shapes == gt_shapes)
+
+    accuracy = correct / len(gt_shapes)
+
+    return accuracy * 100
+
+def get_color_accuracy(predicted_colors, gt_colors):
+    scores = []
+    for pred, gt in zip(predicted_colors, gt_colors):
+
+        pred_set = set(pred)
+        gt_set = set(gt)
+
+        intersection = len(pred_set.intersection(gt_set))
+        union = len(pred_set.union(gt_set))
+
+        if union == 0:
+            score = 0
+        else:
+            score = intersection / union
+
+        scores.append(score)
+
+    return np.mean(scores) * 100
+
+def Kmean_statistics(image, Kmax):
+
+    wcds = []
+    iterations = []
+    times = []
+
+    Ks = range(2, Kmax + 1)
+
+    for k in Ks:
+
+        options = { 'km_init': 'first', 'max_iter': 100, 'tolerance': 0}
+
+        km = KMeans(image, K=k, options=options)
+
+        start = time.time()
+
+        km.fit()
+
+        end = time.time()
+
+        wcds.append(km.withinClassDistance())
+        iterations.append(km.num_iter)
+        times.append(end - start)
+
+
+    # GRÁFICAS WCD, TIEMPO y It
+
+    plt.figure()
+
+    plt.plot(Ks, wcds, marker='o')
+
+    plt.xlabel('K')
+    plt.ylabel('WCD')
+    plt.title('WCD vs K')
+
+    plt.show()
+
+    plt.figure()
+
+    plt.plot(Ks, iterations, marker='o')
+
+    plt.xlabel('K')
+    plt.ylabel('Iterations')
+    plt.title('Iterations vs K')
+
+    plt.show()
+    
+    plt.figure()
+
+    plt.plot(Ks, times, marker='o')
+
+    plt.xlabel('K')
+    plt.ylabel('Time (s)')
+    plt.title('Convergence Time vs K')
+
+    plt.show()
+
+    return wcds, iterations, times
+
+
+
 
 if __name__ == '__main__':
 
