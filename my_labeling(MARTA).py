@@ -143,7 +143,7 @@ if __name__ == '__main__':
     cropped_images = crop_images(imgs, upper, lower)
 
     # You can start coding your functions here
-    """
+   """
     QUALITATIU
     
     
@@ -160,11 +160,28 @@ if __name__ == '__main__':
     
     res = retrieval_by_color(imgs, color_labels, ['Blue'])
     visualize_retrieval(res, 10, info=['Blue']*len(res), title='Blue items')
-    """
     res = retrieval_by_shape(imgs, class_labels, ['Shirts'])
     print("Shirts:", len(res))
     #print("Formes disponibles:", set(class_labels)) Per eure com s'esciuen les peces de roba
     visualize_retrieval(res, 10, info=['Shirts']*len(res), title='Shirts')
+
+    """
+    knn = KNN(train_imgs, train_class_labels)
+
+    predicted_labels = knn.predict(test_imgs, k=3)
+    
+    res = retrieval_by_shape(
+        test_imgs,
+        predicted_labels,
+        ['Shirts']
+    )
+    
+    visualize_retrieval(
+        res,
+        10,
+        info=['Shirts'] * len(res),
+        title='KNN Retrieval - Shirts'
+    )
 
     
     
