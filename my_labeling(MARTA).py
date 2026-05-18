@@ -4,10 +4,12 @@ __group__ = '17'
 from utils_data import read_dataset, read_extended_dataset, crop_images
 from utils_data import visualize_retrieval
 
-from Kmeans import KMeans
+from Kmeans import KMeans, get_colors
 from KNN import KNN
 
+import matplotlib.pyplot as plt
 import numpy as np
+import time
 
 # Analisis qualitatiu
 def retrieval_by_color(images, color_labels, query_colors):
