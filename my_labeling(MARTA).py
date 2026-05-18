@@ -143,8 +143,10 @@ if __name__ == '__main__':
     cropped_images = crop_images(imgs, upper, lower)
 
     # You can start coding your functions here
-   """
-    QUALITATIU
+   
+        # You can start coding your functions here
+    """
+    QUALITATIU - PROVES MARTA
     
     
     Visualitzar imatges originals
@@ -158,14 +160,16 @@ if __name__ == '__main__':
     
     Visualitzar imatges retallades (zoom, pero massa pixelades)
     
-    res = retrieval_by_color(imgs, color_labels, ['Blue'])
-    visualize_retrieval(res, 10, info=['Blue']*len(res), title='Blue items')
+    
     res = retrieval_by_shape(imgs, class_labels, ['Shirts'])
     print("Shirts:", len(res))
     #print("Formes disponibles:", set(class_labels)) Per eure com s'esciuen les peces de roba
     visualize_retrieval(res, 10, info=['Shirts']*len(res), title='Shirts')
 
-    """
+        
+     
+
+    
     knn = KNN(train_imgs, train_class_labels)
 
     predicted_labels = knn.predict(test_imgs, k=3)
@@ -173,17 +177,88 @@ if __name__ == '__main__':
     res = retrieval_by_shape(
         test_imgs,
         predicted_labels,
-        ['Shirts']
+        ['Sandals']
     )
     
     visualize_retrieval(
         res,
-        10,
-        info=['Shirts'] * len(res),
-        title='KNN Retrieval - Shirts'
+        12,
+        info=['Sandals'] * len(res),
+        title='KNN Retrieval - Sandals'
     )
+    #print("Formes disponibles:", set(class_labels)) # Per eure com s'esciuen les peces de roba
+    res = retrieval_combined(test_imgs, color_labels, class_labels, ['Blue'], ['Shirts'])
+    visualize_retrieval(res, 12, info=['Blue Shirts']*len(res), title=' BLue Shirts')
 
     
+    res = retrieval_by_color(test_imgs, color_labels, ['Blue'])
+    visualize_retrieval(res, 10, info=['Blue']*len(res), title='Blue items')
+"""
+    
+    """
+    KNN: PROVES DE FORMA
+    S'utilitza KNN perque el problema de la forma de la roba és un problema
+    de classificació supervisada. Tenim:
+        - imatges supervisades (train_imgs)
+        - sabem quina peça és cada una (train_class_labels)
+        - volem predir la categoria de noves imatges
+    KNN compara una imatge nova amb les imatges del conjunt d'entrenament i mira quines són les més semblants
+    k=3; el classificador mirara els 3 veins més propers
+    El valor de k afecta el comportamrnt del model
+    """
+
+
+    """
+    KMEANS: PROVES DE COLOR
+        agrupa píxels similars segons el seu color RGB.
+        Agrupa tots els pixels de la imatge
+        busca colors semblants
+        crea grups
+        cada grup te un centroide (color representatiu), despres els centroides es transformen en etiquetes
+        predicted_colors = []
+
+        for img in test_imgs:
+        
+            km = KMeans(img, K=3)
+        
+            km.fit()
+        
+            colors = get_colors(km.centroids)
+        
+            predicted_colors.append(colors)
+        
+        res = retrieval_by_color(
+            test_imgs,
+            predicted_colors,
+            ['Blue']
+        )
+        
+        visualize_retrieval(
+            res,
+            12,
+            info=['Blue'] * len(res),
+            title='KNN Retrieval - Sandals'
+        )
+        
+    """
+    predicted_colors=[]
+    for img in imgs:
+    
+        km = KMeans(img, K=3)
+    
+        km.fit()
+    
+        colors = get_colors(km.centroids)
+    
+        predicted_colors.append(colors)
+    
+    res = retrieval_by_color(imgs, predicted_colors,['Blue'])
+    
+    visualize_retrieval(res, 10,info=['Blue'] * len(res),title='Peces Blue')
+    
+    
+    
+
     
     
     
