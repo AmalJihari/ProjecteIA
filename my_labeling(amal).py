@@ -1,348 +1,276 @@
 __authors__ = ['1747579', '1744604', '1744896']
 __group__ = '17'
 
+from utils_data import read_dataset, read_extended_dataset, crop_images
+from utils_data import visualize_retrieval
+
+from Kmeans import KMeans, get_colors
+from KNN import KNN
+
+import matplotlib.pyplot as plt
 import numpy as np
-import utils
+import time
+
+# =====================================================================
+# ANÀLISI QUALITATIU
+# =====================================================================
+def retrieval_by_color(images, color_labels, query_colors):
+    """
+    Retorna totes les imatges que contenen algun dels colors demanats.
+    images: llista d'imatges
+    color_labels: llista de llistes de colors per imatge
+    query_colors: llista de colors a buscar
+    """
+    res = []
+    for img, labels in zip(images, color_labels):
+        if any(x in labels for x in query_colors):
+            res.append(img)
+    return res
+
+def retrieval_by_shape(images, shape_labels, query_shapes):
+    """
+    Retorna totes les imatges que coincideixen amb la forma demanada.
+    """
+    res = []
+    for img, labels in zip(images, shape_labels):
+        if labels in query_shapes:
+            res.append(img)
+    return res
+
+def retrieval_combined(images, color_labels, shape_labels, query_colors, query_shapes):
+    res = []
+    for img, color, shape in zip(images, color_labels, shape_labels):
+        if any(x in color for x in query_colors) and shape in query_shapes:
+            res.append(img)
+    return res
 
 
-class KMeans:
+# =====================================================================
+# ANÀLISI QUANTITATIU
+# =====================================================================
+def get_shape_accuracy(predicted_shapes, gt_shapes):
+    """
+    Calcula el percentatge d'acert de la classificació de formes.
+    """
+    predicted_shapes = np.array(predicted_shapes)
+    gt_shapes = np.array(gt_shapes)
 
-    def __init__(self, X, K=1, options=None):
-        """
-         Constructor of KMeans class
-             Args:
-                 K (int): Number of cluster
-                 options (dict): dictionary with options
-            """
-        self.num_iter = 0
-        self.K = K
-        self._init_X(X)
-        self._init_options(options)  
+    correct = np.sum(predicted_shapes == gt_shapes)
+    accuracy = correct / len(gt_shapes)
 
-    #############################################################
-    ##  THIS FUNCTION CAN BE MODIFIED FROM THIS POINT, if needed
-    #############################################################
+    return accuracy * 100
 
-    def _init_X(self, X):
-        """Initialization of all pixels, sets X as an array of data in vector form (PxD)
-            Args:
-                X (list or np.array): list(matrix) of all pixel values
-                    if matrix has more than 2 dimensions, the dimensionality of the sample space is the length of
-                    the last dimension
-        """
-        #######################################################
-        ##  YOU MUST REMOVE THE REST OF THE CODE OF THIS FUNCTION
-        ##  AND CHANGE FOR YOUR OWN CODE
-        #######################################################
-        f=np.asarray(X, dtype = float)
+def get_color_accuracy(predicted_colors, gt_colors):
+    """
+    Calcula la similitud mitjana (IoU) entre els colors predits i els reals.
+    """
+    scores = []
+    for pred, gt in zip(predicted_colors, gt_colors):
+        pred_set = set(pred)
+        gt_set = set(gt)
+
+        intersection = len(pred_set.intersection(gt_set))
+        union = len(pred_set.union(gt_set))
+
+        if union == 0:
+            score = 0
+        else:
+            score = intersection / union
+
+        scores.append(score)
+
+    return np.mean(scores) * 100
+
+def Kmean_statistics(image, Kmax):
+    """
+    Funció base de l'enunciat per extreure estadístiques d'una imatge variant la K.
+    Útil per fer un primer estudi visual del mètode 'first'.
+    """
+    wcds = []
+    iterations = []
+    times = []
+
+    Ks = range(2, Kmax + 1)
+
+    for k in Ks:
+        options = {'km_init': 'first', 'max_iter': 100, 'tolerance': 0}
+        km = KMeans(image, K=k, options=options)
+
+        start = time.time()
+        km.fit()
+        end = time.time()
+
+        wcds.append(km.withinClassDistance())
+        iterations.append(km.num_iter)
+        times.append(end - start)
+
+    # GRÀFIQUES WCD, ITERACIONS i TEMPS INDIVIDUALS
+    plt.figure()
+    plt.plot(Ks, wcds, marker='o')
+    plt.xlabel('K')
+    plt.ylabel('WCD')
+    plt.title('WCD vs K')
+    plt.show()
+
+    plt.figure()
+    plt.plot(Ks, iterations, marker='o')
+    plt.xlabel('K')
+    plt.ylabel('Iterations')
+    plt.title('Iterations vs K')
+    plt.show()
     
-        if f.ndim> 2:
-            self.X=f.reshape(-1, X.shape[-1])
-        else:
-            self.X=f
+    plt.figure()
+    plt.plot(Ks, times, marker='o')
+    plt.xlabel('K')
+    plt.ylabel('Time (s)')
+    plt.title('Convergence Time vs K')
+    plt.show()
 
-    def _init_options(self, options=None):
-        """
-        Initialization of options in case some fields are left undefined
-        Args:
-            options (dict): dictionary with options
-        """
-        if options is None:
-            options = {}
-        if 'km_init' not in options:
-            options['km_init'] = 'first'
-        if 'verbose' not in options:
-            options['verbose'] = False
-        if 'tolerance' not in options:
-            options['tolerance'] = 0
-        if 'max_iter' not in options:
-            options['max_iter'] = np.inf
-        if 'fitting' not in options:
-            options['fitting'] = 'WCD' 
+    return wcds, iterations, times
 
-        self.options = options
 
-        #############################################################
-        ##  THIS FUNCTION CAN BE MODIFIED FROM THIS POINT, if needed
-        #############################################################
+if __name__ == '__main__':
 
-    def _init_centroids(self):
-        """
-        Initialization of centroids
-       
+    # Llegim les dades
+    train_imgs, train_class_labels, train_color_labels, test_imgs, test_class_labels, \
+        test_color_labels = read_dataset(root_folder='./images/', gt_json='./images/gt.json')
 
-        #######################################################
-        ##  YOU MUST REMOVE THE REST OF THE CODE OF THIS FUNCTION
-        ##  AND CHANGE FOR YOUR OWN CODE
-        #######################################################
-        if self.options['km_init'].lower() == 'first':
-            self.centroids = np.random.rand(self.K, self.X.shape[1])
-            self.old_centroids = np.random.rand(self.K, self.X.shape[1])
-        else:
-            self.centroids = np.random.rand(self.K, self.X.shape[1])
-            self.old_centroids = np.random.rand(self.K, self.X.shape[1])
-        """
-        self.centroids=np.zeros((self.K, self.X.shape[1]))
-        self.old_centroids=np.zeros((self.K, self.X.shape[1]))
-       
-        if self.options['km_init'].lower()=='first':
-            unique_points=[]
-            for p in self.X:
-                duplicat=any(np.array_equal(p,u) for u in unique_points)
-                if not duplicat:
-                    unique_points.append(p)
-               
-                if len(unique_points)==self.K:
-                    break
-           
-            self.centroids=np.array(unique_points)
-           
-        
-        elif self.options['km_init'].lower() == 'geometric':
-            #Es selecciona el primer k a l'atzar: 
-            idx = np.random.randint(self.X.shape[0])
-            self.centroids[0] = self.X[idx]
+    # Llista amb totes les classes existents diferents que hi ha.
+    classes = list(set(list(train_class_labels) + list(test_class_labels)))
+
+    # Imatges tallades (agafar el que ens interessa).
+    imgs, class_labels, color_labels, upper, lower, background = read_extended_dataset()
+    # Tallem les imatges amb les coord donades anteriorment.
+    cropped_images = crop_images(imgs, upper, lower)
+
+    # =====================================================================
+    # TEST AVALUACIÓ DE KMEANS (init_centroides i bestK)
+    # =====================================================================
+    print("EVALUACIÓ DE INICIALITZACIONS K-MEANS I BEST-K")
+    
+    # Seleccionem la 1a imatge
+    imatge_proves = train_imgs[0] 
+    # Decidim agafar K clústers entre 2 i 7.
+    Kmax = 7
+    Ks = list(range(2, Kmax + 1))
+    metodes_kmeans = ['first', 'random', 'geometric']
+    
+    # Estructures de dades per emmagatzemar els resultats dels experiments
+    wcd_per_metode = {m: [] for m in metodes_kmeans} 
+    iter_per_metode = {m: [] for m in metodes_kmeans} 
+    temps_per_metode = {m: [] for m in metodes_kmeans} 
+    
+    # Cada iteració del for executa un mètode diferent
+    for metode in metodes_kmeans:
+        print(f"Executant anàlisi per al mètode d'inicialització: {metode}...")
+        for k in Ks:
+            # Volem 100 iteracions i tolindex rànquing_tolerancia 0
+            opcions_km = {'km_init': metode, 'max_iter': 100, 'tolerance': 0}
+            km = KMeans(imatge_proves, K=k, options=opcions_km)
             
-            for i in range(1, self.K):
-                #Es calcula la distancia minima de cada punt amb els k ja escollits, 
-                #i l'eleva al quadrat (perque hi hagi mes diferencia entre les distàncies). 
-                distSq = np.array([min([np.linalg.norm(x - c)**2 for c in self.centroids[:i]]) for x in self.X])
-                #Dividim la distancia per la suma total de les distancies. 
-                probs = distSq / distSq.sum()
-                #calculem la probabiltat acumulada, amb les anteriors. 
-                #amb cumsum crea una barra: [0, 1]
-                cumulative_probs = np.cumsum(probs)
-                #num aleatori de 0 al 1
-                r = np.random.rand()
-                
-                for j, p in enumerate(cumulative_probs):
-                    if r < p:
-                        #si p (punt mes alt de la barra) cau dins de r, s'afegeix. 
-                        self.centroids[i] = self.X[j]
-                        break
-                    
-                    
-        elif self.options['km_init'].lower() == 'random':
-            #Troba els valors minims dels colors RGB,
-            #axis=0 vol dir que es fa columna per columna (cada color es una).
-            valors_minims = np.min(self.X, axis=0)
-            #Troba els valors maxims
-            valors_maxims = np.max(self.X, axis=0)
-            
-            #genera k centorides aleatoris dins del rang
-            self.centroids = np.random.uniform(low=valors_minims, high=valors_maxims, size=(self.K, self.X.shape[1]))
-        
-                                   
-                   
-        #Opcio CUSTOM:
-        else:
-            for i in range(self.K):
-                if self.K>1:
-                    val=(1*255)/(self.K-1)
-                else:
-                    val=127
-               
-                self.centroids[i]=np.full(self.X.shape[1], val)
-       
-        self.old_centroids=np.zeros_like(self.centroids)
-
-    def get_labels(self):
-        """
-        Calculates the closest centroid of all points in X and assigns each point to the closest centroid
-        """
-        #######################################################
-        ##  YOU MUST REMOVE THE REST OF THE CODE OF THIS FUNCTION
-        ##  AND CHANGE FOR YOUR OWN CODE
-        #######################################################
-        d = distance(self.X, self.centroids)
-        #busquem el q té el valor minim (horitzontalment)
-        self.labels = np.argmin(d, axis=1)
-        
-    def get_centroids(self):
-        """
-        Calculates coordinates of centroids based on the coordinates of all the points assigned to the centroid
-        """
-        #######################################################
-        ##  YOU MUST REMOVE THE REST OF THE CODE OF THIS FUNCTION
-        ##  AND CHANGE FOR YOUR OWN CODE
-        #######################################################
-        self.old_centroids=self.centroids.copy()
-       
-        for k in range (self.K):
-            e=self.labels==k
-            punts=self.X[e]
-           
-            if len(punts)>0:
-                self.centroids[k]=np.mean(punts, axis=0)
-
-    def converges(self):
-        """
-        Checks if there is a difference between current and old centroids
-        """
-        #######################################################
-        ##  YOU MUST REMOVE THE REST OF THE CODE OF THIS FUNCTION
-        ##  AND CHANGE FOR YOUR OWN CODE
-        #######################################################
-        
-        diff = np.linalg.norm(self.centroids - self.old_centroids)
-        return (diff <= self.options['tolerance'])
-
-    def fit(self):
-        """
-        Runs K-Means algorithm until it converges or until the number of iterations is smaller
-        than the maximum number of iterations.
-        """
-        #######################################################
-        ##  YOU MUST REMOVE THE REST OF THE CODE OF THIS FUNCTION
-        ##  AND CHANGE FOR YOUR OWN CODE
-        #######################################################
-        self._init_centroids()
-        self.num_iter = 0
-        
-        while self.num_iter < self.options['max_iter']:
-            self.get_labels()
-            self.get_centroids()
-            
-            self.num_iter +=1
-            # comprovem convergencia
-            if self.converges():
-                break
-
-    def withinClassDistance(self):
-        """
-         returns the within class distance of the current clustering
-        """
-
-        #######################################################
-        ##  YOU MUST REMOVE THE REST OF THE CODE OF THIS FUNCTION
-        ##  AND CHANGE FOR YOUR OWN CODE
-        #######################################################
-        # FORMULA
-        centroids_assigned = self.centroids[self.labels] #NxD
-        #diferencia punt - centroide
-        diff = self.X - centroids_assigned
-        # distancia quadrada
-        sq_dist = np.sum(diff**2, axis=1)
-        # mitjana
-        self.WCD = np.mean(sq_dist)
-        return self.WCD
-
-    def find_bestK(self, max_K):
-        """
-         sets the best k analysing the results up to 'max_K' clusters
-        """
-        #######################################################
-        ##  YOU MUST REMOVE THE REST OF THE CODE OF THIS FUNCTION
-        ##  AND CHANGE FOR YOUR OWN CODE
-        #######################################################
-      
-        llista_wcds = []
-        puntuacions_fisher = []
-        #executem el kmeans per cada k
-        for k in range(2, max_K + 1):
-            km = KMeans(self.X, K=k, options=self.options)
+            t_inici = time.time()
             km.fit()
+            t_final = time.time()
             
-            #calcula WCD (distància inter-class)
-            wcd_actual = km.withinClassDistance()
-            llista_wcds.append(wcd_actual)
-            
-            #Calcul de FISHER: 
-            distancia_inter = 0
-            for i, c1 in enumerate(km.centroids):
-                #agafa els centroides a partir de la posicio
-                #on esta ara fins al final
-                for c2 in km.centroids[i+1:]:
-                    #calcula la distancia en linia recta entre els centroides
-                    #com mes gran millor
-                    distancia_inter += np.linalg.norm(c1 - c2)
-            
-            #guardem el resultat de Fisher per a aquesta K
-            #el 1e-6 es un numero molt petit per si el wdc es 0, evitar dividir entre 0.
-            puntuacio_fisher = distancia_inter / (wcd_actual + 1e-6)
-            puntuacions_fisher.append(puntuacio_fisher)
-            
-       #llegim les ordres que li donem al kmeans
-        metode_ajust = self.options.get('fitting', 'WCD').upper()
+            wcd_per_metode[metode].append(km.withinClassDistance())
+            iter_per_metode[metode].append(km.num_iter)
+            temps_per_metode[metode].append(t_final - t_inici)
+
+    # GRÀFICA A: Evolució del WCD
+    plt.figure(figsize=(8, 5))
+    plt.plot(Ks, wcd_per_metode['first'], marker='o', label='Original (first)', linewidth=2)
+    plt.plot(Ks, wcd_per_metode['random'], marker='s', label='Millora (random)', linewidth=2)
+    plt.plot(Ks, wcd_per_metode['geometric'], marker='^', label='Millora (geometric)', linewidth=2)
+    plt.xlabel('Número de Clústers (K)')
+    plt.ylabel('Within Class Distance (WCD)')
+    plt.title('Comparativa directa del WCD (Anàlisi d\'eficiència BestK)')
+    plt.legend()
+    plt.grid(True, linestyle='--')
+    plt.show()
+
+    # GRÀFICA B: Evolució de la quantitat d'iteracions
+    plt.figure(figsize=(8, 5))
+    plt.plot(Ks, iter_per_metode['first'], marker='o', label='Original (first)', linewidth=2)
+    plt.plot(Ks, iter_per_metode['random'], marker='s', label='Millora (random)', linewidth=2)
+    plt.plot(Ks, iter_per_metode['geometric'], marker='^', label='Millora (geometric)', linewidth=2)
+    plt.xlabel('Número de Clústers (K)')
+    plt.ylabel('Iteracions realitzades fins convergir')
+    plt.title('Velocitat d\'optimització: Nombre d\'iteracions vs K')
+    plt.legend()
+    plt.grid(True, linestyle='--')
+    plt.show()
+
+
+    # =====================================================================
+    # AVALUACIÓ DE LES MILLORES: KNN (Estudi de Precisió i Temps de Càlcul)
+    # =====================================================================
+    print("\n--- EVALUACIÓ DE CONFIGURACIONS KNN ---")
+    
+    # Definició de les opcions de configuració amb els strings correctes en català
+    proves_knn = [
+        {'nom': 'Base (Pixel + Euclidean)', 'feat': 'pixel', 'dist': 'euclidean'},
+        {'nom': 'Millora 1 (Pixel + Manhattan)', 'feat': 'pixel', 'dist': 'cityblock'},
+        {'nom': 'Millora 2 (Reduccio + Euclidean)', 'feat': 'reduccio', 'dist': 'euclidean'},
+        {'nom': 'Millora 3 (Descriptors + Euclidean)', 'feat': 'descriptors', 'dist': 'euclidean'}
+    ]
+    
+    noms_grafic = []
+    precisions_grafic = []
+    temps_grafic = []
+
+    # Llançament dels experiments numèrics del KNN
+    for prova in proves_knn:
+        opcions_knn = {'knn_features': prova['feat'], 'knn_dist': prova['dist']}
+        knn = KNN(train_imgs, train_class_labels, options=opcions_knn)
         
-       #MILLORA 1:  Fisher
-        if metode_ajust == 'FISHER':
-            #busca en quina posició esta el quocient de fisher més alt. 
-            millor_index = np.argmax(puntuacions_fisher)
-            #Com el bucle coemnça amb k=2, li sumem 2 a aquest index
-            self.K = millor_index + 2
-            return self.K
-            
-        #MILLORA 2: llindar adaptatiu
-        elif metode_ajust == 'ADAPTATIVE':
-            decrements = []
-            #comença amb k=3, i compara l'error que es manté entre
-            #la K i la K anterior. 
-            for i in range(1, len(llista_wcds)):
-                decrements.append(100 * (llista_wcds[i] / llista_wcds[i-1]))
-            
-            #el nou llindar calculat: mitjanadecrements*0.8
-            llindar_adaptatiu = np.mean(decrements) * 0.8
-            
-            # Busquem el primer punt on la millora es frena per sota del llindar
-            for i in range(1, len(llista_wcds)):
-                decrement_actual = 100 * (llista_wcds[i] / llista_wcds[i-1])
-                #la millora s'obte retantli 100 a l'error
-                if (100 - decrement_actual) < llindar_adaptatiu:
-                    self.K = i + 1
-                    return self.K
-            
-            self.K = max_K
-            return self.K
-            
-       #Opcio inicial: WCD
-        else:
-            for i in range(1, len(llista_wcds)):
-                decrement_actual = 100 * (llista_wcds[i] / llista_wcds[i-1])
-                if (100 - decrement_actual) < 20:
-                    self.K = i + 1
-                    return self.K
+        t_inici = time.time()
+        prediccions = knn.predict(test_imgs, k=3)
+        t_final = time.time()
+        
+        temps_execucio = t_final - t_inici
+        precisio = get_shape_accuracy(prediccions, test_class_labels)
+        
+        # Guardem resultats per a la representació gràfica posterior
+        noms_grafic.append(prova['nom'])
+        precisions_grafic.append(precisio)
+        temps_grafic.append(temps_execucio)
+        
+        print(f"{prova['nom']:<38} -> Precisió: {precisio:.2f}% | Temps de Càlcul: {temps_execucio:.4f}s")
+
+    # GRÀFICA C: Mètrica de Precisió Global de Classificació de Formes
+    plt.figure(figsize=(10, 4))
+    plt.bar(noms_grafic, precisions_grafic, color='skyblue', edgecolor='black', alpha=0.8)
+    plt.ylabel('Precisió d\'encert (%)')
+    plt.title('Anàlisi comparatiu de Precisió del Model KNN')
+    plt.xticks(rotation=10)
+    plt.grid(axis='y', linestyle='--')
+    plt.tight_layout()
+    plt.show()
+
+    # GRÀFICA D: Mètrica del Cost Computacional
+    plt.figure(figsize=(10, 4))
+    plt.bar(noms_grafic, temps_grafic, color='salmon', edgecolor='black', alpha=0.8)
+    plt.ylabel('Temps d\'execució total (Segons)')
+    plt.title('Cost Computacional: Temps de Càlcul del KNN segons la millora')
+    plt.xticks(rotation=10)
+    plt.grid(axis='y', linestyle='--')
+    plt.tight_layout()
+    plt.show()
+
+
+    # =====================================================================
+    # EXTRACTE DE PROVES QUALITATIVES COMPLEMENTÀRIES
+    # =====================================================================
+    print("\n--- EXECUTANT PROVA EXTRA DE RECUPERACIÓ PER COLOR ---")
+    predicted_colors = []
+    for img in test_imgs[:15]:  # Execució limitada a 15 imatges de mostra per estalviar temps
+        km = KMeans(img, K=3)
+        km.fit()
+        colors = get_colors(km.centroids)
+        predicted_colors.append(colors)
     
-            self.K = max_K
-            return self.K
-    
-
-def distance(X, C):
-    """
-    Calculates the distance between each pixel and each centroid
-    Args:
-        X (numpy array): PxD 1st set of data points (usually data points)
-        C (numpy array): KxD 2nd set of data points (usually cluster centroids points)
-
-    Returns:
-        dist: PxK numpy array position ij is the distance between the
-        i-th point of the first set an the j-th point of the second set
-    """
-
-    #########################################################
-    ##  YOU MUST REMOVE THE REST OF THE CODE OF THIS FUNCTION
-    ##  AND CHANGE FOR YOUR OWN CODE
-    #########################################################
-
-    #matriu buida
-    X_sq = np.sum(X**2, axis = 1, keepdims= True) # Nx1
-    C_sq = np.sum(C**2, axis = 1) # K
-    creu = X @ C.T # NxK
-    dist = np.sqrt(X_sq + C_sq -2 * creu)
-    return dist
-    
-def get_colors(centroids):
-    """
-    for each row of the numpy matrix 'centroids' returns the color label following the 11 basic colors as a LIST
-    Args:
-        centroids (numpy array): KxD 1st set of data points (usually centroid points)
-
-    Returns:
-        labels: list of K labels corresponding to one of the 11 basic colors
-    """
-
-    #########################################################
-    ##  YOU MUST REMOVE THE REST OF THE CODE OF THIS FUNCTION
-    ##  AND CHANGE FOR YOUR OWN CODE
-    #########################################################
-    return [utils.colors[np.argmax(p)] for p in utils.get_color_prob(centroids)]
+    res = retrieval_by_color(test_imgs[:15], predicted_colors, ['Blue'])
+    if len(res) > 0:
+        visualize_retrieval(res, min(len(res), 10), info=['Blue'] * len(res), title='Peces detectades com a blaves')
+    else:
+        print("No s'han trobat peces de roba blaves a la mostra reduïda de test.")
