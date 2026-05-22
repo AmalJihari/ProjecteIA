@@ -337,11 +337,6 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.show()
     
-    # Añade esto si quieres ver la imagen en una ventana flotante:
-    plt.figure()
-    plt.imshow(imatge_proves, cmap='gray' if imatge_proves.ndim == 2 else None)
-    plt.title("Aquesta és la imatge real del Test!")
-    plt.show()
 
 
     # =====================================================================
